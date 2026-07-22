@@ -42,40 +42,6 @@ static const i2s_pin_config_t pin_config = {
     .data_in_num = 23   // Data in from INMP441 (SD)
 };
 
-enum Interval
-{
-  tonic,
-  minor_third,
-  major_third,
-  perfect_fourth,
-  perfect_fifth
-};
-
-// --- Based on button input update pitch_shift
-float updateInterval(int button_pressed)
-{
-  switch (button_pressed)
-  {
-  case tonic:
-    return 1.0f;
-    break;
-  case minor_third:
-    return 6.0f / 5;
-    break;
-  case major_third:
-    return 1.25f;
-    break;
-  case perfect_fourth:
-    return 4.0f / 3;
-    break;
-  case perfect_fifth:
-    return 1.5f;
-    break;
-  default:
-    return 1.0f;
-    break;
-  }
-}
 
 // --- Expand the Global Read Pointers for Multiple Voices ---
 // Voice A (Major 3rd)
