@@ -3,6 +3,8 @@
 #include <iostream>
 #include <string>
 
+
+//hi
 const int num_buttons = 9;
 // first button in notes is the tonic
 bool notes[num_buttons];
