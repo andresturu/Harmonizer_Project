@@ -46,10 +46,19 @@ static const i2s_pin_config_t pin_config = {
 };
 
 
-
-const int num_harmony_buttons = 8;
+bool is_ascending = true;
+const int num_harmony_buttons = 7;
 bool harmony_notes[num_harmony_buttons];
-float harmony_freqs[] = {0.80f, 0.83f, 1.2f, 1.25f, 1.33f, 1.5f, 1.60, 2.0f};
+//just temperament, experimetn with equal as well
+float harmony_freqs[] = {
+  9.0f / 8.0f,   // Major 2nd  (1.125f)
+  6.0f / 5.0f,   // Minor 3rd  (1.2f)
+  5.0f / 4.0f,   // Major 3rd  (1.25f)
+  4.0f / 3.0f,   // Perfect 4th (1.3333334f)
+  3.0f / 2.0f,   // Perfect 5th (1.5f)
+  16.0f / 9.0f,  // Minor 7th  (1.7777778f)
+  15.0f / 8.0f   // Major 7th  (1.875f)
+};
 struct Voice {
   bool active = false;
   float ratio = 1.0f;
@@ -114,11 +123,19 @@ void loop()
         harmony_notes[i] = 0;
       }
     }
+    // if wanting to change interval to up or down
+    else if (keyevent.keyID == 2) 
+    {
+      is_ascending = !is_ascending;
+    }
     // if button other than the reset button is pressed, add button to notes
     else
     {
       //std::cout << "add another harmony note\n";
-      harmony_notes[keyevent.keyID -2 ] = 1;
+      int note_index = keyevent.keyID-3;
+      if (note_index >= 0 && note_index < num_harmony_buttons){
+        harmony_notes[note_index] = true;
+      }
     }
     
     printKeypad();
@@ -145,8 +162,8 @@ void process_audio() {
   for (int i = 0; i < num_harmony_buttons; i++) {
     // Only activate if button has been pressed AND we haven't hit our 4-voice limit
     if (harmony_notes[i] && active_count < MAX_ACTIVE_VOICES) {
-      voices[i].active = true;
-      voices[i].ratio = harmony_freqs[i];
+      voices[i].active = true; 
+      voices[i].ratio = (is_ascending) ? harmony_freqs[i] : 1.0f/harmony_freqs[i];
       active_count++;
     } else {
       voices[i].active = false;
@@ -154,8 +171,8 @@ void process_audio() {
   }
 
   // 2. Dynamic Gain Balance (40% dry, 60% split across active voices)
-  float dry_gain = (active_count > 0) ? 0.3f : 1.0f;
-  float voice_gain = (active_count > 0) ? (0.7f / (float)active_count) : 0.0f;
+  float dry_gain = (active_count > 0) ? 0.2f : 1.0f;
+  float voice_gain = (active_count > 0) ? (0.8f / (float)active_count) : 0.0f;
 
   // 3. Audio Processing Loop
   for (int i = 0; i < sample_count; i++)
