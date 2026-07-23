@@ -6,8 +6,6 @@
 
 static const i2s_port_t i2s_num = I2S_NUM_0;
 
-
-
 // Buffer and audio parameters
 const uint16_t sample_count = 512; // Dropped to 512 for ultra-low latency
 const i2s_bits_per_sample_t i2s_bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
