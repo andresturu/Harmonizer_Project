@@ -50,6 +50,28 @@ void setup() {
 void loop() {
   size_t bytesRead, bytesWritten;
 
+  // 1. Read the raw I2S buffer
   i2s_read(i2s_num, sample_buffer, i2s_bytes, &bytesRead, portMAX_DELAY);
+
+  // Cast buffer to 32-bit signed integers (Left and Right alternate: [L0, R0, L1, R1...])
+  int32_t *samples = (int32_t*) sample_buffer;
+  size_t total_samples = bytesRead / sizeof(int32_t);
+
+  // 2. Overwrite the noisy Right channel with the clean Left channel
+  for (size_t i = 0; i < total_samples; i += 2) {
+    int32_t left_sample = samples[i];
+
+    // Optional: Bit-mask the lower 8 bits of unused INMP441 noise
+    left_sample &= 0xFFFFFF00; 
+
+    samples[i]     = left_sample; // Left Channel (Clean mic audio)
+    samples[i + 1] = left_sample; // Right Channel (Copy of Left channel)
+  }
+
+  // 3. Send the clean audio to the PCM5102 DAC
   i2s_write(i2s_num, sample_buffer, bytesRead, &bytesWritten, portMAX_DELAY);
+  // size_t bytesRead, bytesWritten;
+
+  // i2s_read(i2s_num, sample_buffer, i2s_bytes, &bytesRead, portMAX_DELAY);
+  // i2s_write(i2s_num, sample_buffer, bytesRead, &bytesWritten, portMAX_DELAY);
 }
