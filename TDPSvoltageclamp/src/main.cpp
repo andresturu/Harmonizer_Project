@@ -1,3 +1,8 @@
+
+// Implement voltage clamping on TDPS with one read pointer
+// Goal: fix "popping" sounds caused by write and read pointer collisions
+
+
 #include <Arduino.h>
 #include "driver/i2s.h"
 
@@ -17,8 +22,8 @@ uint64_t sample_buffer[sample_count];
 #define BUFFER_SIZE 2048 // Size of the circular delay line
 float delay_buffer[BUFFER_SIZE];
 int write_ptr = 0;
-
 float read_ptr1 = 0.0f;
+float previous_sample = 0.0f;
 
 // --- I2S Configuration Block ---
 static const i2s_config_t i2s_config = {
@@ -63,8 +68,22 @@ void processAudio(float pitch_ratio)
     // linear interpolation: for estimating values "in between" integer indices
     float val1 = delay_buffer[rp1_floor] + (read_ptr1 - rp1_floor) * (delay_buffer[rp1_ceil] - delay_buffer[rp1_floor]);
    
+    // voltage clamp the changes
+    float current_sample = val1;
+    float delta = current_sample - previous_sample;
+
+    if (delta > 5000000.0f) {
+      float shifted_signal = previous_sample + 5000000.0f;
+    }
+    else if (delta < 5000000.0f) {
+      float shifted_signal = previous_sample - 5000000.0f;
+    }
+    else {
+      float shifted_signal = val1;
+    }
+
     // 6. Blend both read heads together using crossfade weights
-    float shifted_signal = val1;  //(val1 * fade1) + (val2 * fade2);
+    //float shifted_signal = val1;  //(val1 * fade1) + (val2 * fade2);
 
     // 7. Clamp outputs to prevent digital clipping
     if (shifted_signal > INT32_MAX)
@@ -95,6 +114,8 @@ void setup()
   {
     delay_buffer[i] = 0.0f;
   }
+
+
 
   // Install and start I2S driver
   esp_err_t err = i2s_driver_install(i2s_num, &i2s_config, 0, NULL);
