@@ -19,7 +19,6 @@ float delay_buffer[BUFFER_SIZE];
 int write_ptr = 0;
 
 float read_ptr1 = 0.0f;
-float read_ptr2 = BUFFER_SIZE / 2; // Offset by 180 degrees to balance crossfades
 
 // --- I2S Configuration Block ---
 static const i2s_config_t i2s_config = {
@@ -57,27 +56,15 @@ void processAudio(float pitch_ratio)
     // 2. Write raw microphone data into circular buffer
     delay_buffer[write_ptr] = (float)active_sample;
 
-    // 3. Calculate distances between write pointer and both read pointers
-    float dist1 = write_ptr - read_ptr1;
-    if (dist1 < 0)
-      dist1 += BUFFER_SIZE;
-
-    // 4. Create complementary triangle fade windows
-    float fade1 = dist1 / (float)BUFFER_SIZE;
-    float fade2 = 1.0f - fade1;
-
-    // 5. Read from both pointers using linear interpolation
+    // 5. Read from pointer using linear interpolation
     int rp1_floor = (int)read_ptr1;
-    int rp2_floor = (int)read_ptr2;
     int rp1_ceil = (rp1_floor + 1) % BUFFER_SIZE; // modulus to prevent out of bounds indexing
-    int rp2_ceil = (rp2_floor + 1) % BUFFER_SIZE;
 
     // linear interpolation: for estimating values "in between" integer indices
     float val1 = delay_buffer[rp1_floor] + (read_ptr1 - rp1_floor) * (delay_buffer[rp1_ceil] - delay_buffer[rp1_floor]);
-    float val2 = delay_buffer[rp2_floor] + (read_ptr2 - rp2_floor) * (delay_buffer[rp2_ceil] - delay_buffer[rp2_floor]);
-
+   
     // 6. Blend both read heads together using crossfade weights
-    float shifted_signal = (val1 * fade1) + (val2 * fade2);
+    float shifted_signal = val1;  //(val1 * fade1) + (val2 * fade2);
 
     // 7. Clamp outputs to prevent digital clipping
     if (shifted_signal > INT32_MAX)
@@ -96,9 +83,6 @@ void processAudio(float pitch_ratio)
     if (read_ptr1 >= BUFFER_SIZE)
       read_ptr1 -= BUFFER_SIZE;
 
-    read_ptr2 += pitch_ratio;
-    if (read_ptr2 >= BUFFER_SIZE)
-      read_ptr2 -= BUFFER_SIZE;
   }
 }
 
@@ -132,12 +116,6 @@ void loop()
 
   // Read raw audio from mic
   i2s_read(i2s_num, sample_buffer, i2s_read_size_bytes, &BytesRead, portMAX_DELAY);
-
-  // // Return pressed button number -> 0 default
-  // button_pressed = getButton();
-
-  // // Choose ratio based on button
-  // pitch_ratio = updateInterval(button_pressed);
 
   pitch_ratio = 1.25f;
   // Process and shift the audio (Time-Domain)
