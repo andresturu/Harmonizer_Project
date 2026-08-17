@@ -36,8 +36,8 @@ static const i2s_config_t i2s_config = {
     .fixed_mclk = -1};
 
 static const i2s_pin_config_t pin_config = {
-    .bck_io_num = 26,   // Bit Clock (SCK on Mic, BCLK on DAC)
-    .ws_io_num = 25,    // Word Select (WS on Mic, LRC on DAC)
+    .bck_io_num = 19,//26,   // Bit Clock (SCK on Mic, BCLK on DAC)
+    .ws_io_num = 21,//25,    // Word Select (WS on Mic, LRC on DAC)
     .data_out_num = 22, // Data out to MAX98357A (DIN)
     .data_in_num = 23   // Data in from INMP441 (SD)
 };
@@ -55,8 +55,8 @@ float read_ptrB2 = BUFFER_SIZE / 2;
 void processAudio()
 {
   // Define your chord intervals
-  const float ratio_third = 1.2f; // minor 3rd
-  const float ratio_fifth = 1.5f; // Perfect 5th
+  const float ratio_third = 1.0f; // minor 3rd
+  const float ratio_fifth = 1.0f; // Perfect 5th
 
   // Volume scale factors so the combined chord doesn't clip
   const float dry_gain = 0.8f;   // 40% original voice

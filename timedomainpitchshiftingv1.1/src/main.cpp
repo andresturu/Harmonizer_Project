@@ -4,7 +4,7 @@
 static const i2s_port_t i2s_num = I2S_NUM_0;
 
 // Buffer and audio parameters
-const uint16_t sample_count = 512; // Dropped to 512 for ultra-low latency
+const uint16_t sample_count = 1024/8; // Dropped to 512 for ultra-low latency
 const i2s_bits_per_sample_t i2s_bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
 const uint8_t i2s_bytes_per_sample = i2s_bits_per_sample / 8;
 const int num_channels = 2;
@@ -14,7 +14,7 @@ const uint16_t i2s_read_size_bytes = sample_count * i2s_bytes_per_sample * num_c
 uint64_t sample_buffer[sample_count];
 
 // --- Delay Line Configurations ---
-#define BUFFER_SIZE 2048 // Size of the circular delay line
+#define BUFFER_SIZE 4 * 1024 // Size of the circular delay line
 float delay_buffer[BUFFER_SIZE];
 int write_ptr = 0;
 
@@ -30,14 +30,14 @@ static const i2s_config_t i2s_config = {
     .communication_format = I2S_COMM_FORMAT_STAND_I2S,
     .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
     .dma_buf_count = 8,
-    .dma_buf_len = 256,
+    .dma_buf_len = 1024,
     .use_apll = 0,
     .tx_desc_auto_clear = true,
     .fixed_mclk = -1};
 
 static const i2s_pin_config_t pin_config = {
-    .bck_io_num = 26,   // Bit Clock (SCK on Mic, BCLK on DAC)
-    .ws_io_num = 25,    // Word Select (WS on Mic, LRC on DAC)
+    .bck_io_num = 19,   // Bit Clock (SCK on Mic, BCLK on DAC)
+    .ws_io_num = 21,    // Word Select (WS on Mic, LRC on DAC)
     .data_out_num = 22, // Data out to MAX98357A (DIN)
     .data_in_num = 23   // Data in from INMP441 (SD)
 };
@@ -45,6 +45,7 @@ static const i2s_pin_config_t pin_config = {
 // --- Real-time DSP Pitch Shifter ---
 void processAudio(float pitch_ratio)
 {
+  uint32_t time = micros();
   for (int i = 0; i < sample_count; i++)
   {
     //
@@ -100,6 +101,7 @@ void processAudio(float pitch_ratio)
     if (read_ptr2 >= BUFFER_SIZE)
       read_ptr2 -= BUFFER_SIZE;
   }
+  //Serial.println(micros() - time);
 }
 
 void setup()
@@ -133,16 +135,20 @@ void loop()
   // Read raw audio from mic
   i2s_read(i2s_num, sample_buffer, i2s_read_size_bytes, &BytesRead, portMAX_DELAY);
 
+  Serial.println(BytesRead);
+  uint32_t time = micros();
   // // Return pressed button number -> 0 default
   // button_pressed = getButton();
 
   // // Choose ratio based on button
   // pitch_ratio = updateInterval(button_pressed);
 
-  pitch_ratio = 1.25f;
+  pitch_ratio = 1.0;
   // Process and shift the audio (Time-Domain)
   processAudio(pitch_ratio);
 
+
   // Write shifted audio to DAC/Speaker
   i2s_write(i2s_num, sample_buffer, i2s_read_size_bytes, &BytesWritten, portMAX_DELAY);
+  //Serial.println(micros() - time);
 }

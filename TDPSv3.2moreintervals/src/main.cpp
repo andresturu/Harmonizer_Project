@@ -106,6 +106,8 @@ void loop()
   size_t BytesRead;
   size_t BytesWritten;
 
+
+
   // Read raw audio from mic
   i2s_read(i2s_num, sample_buffer, i2s_read_size_bytes, &BytesRead, portMAX_DELAY);
 
