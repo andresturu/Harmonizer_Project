@@ -3,7 +3,7 @@
 #ifndef KEYPAD
 #define KEYPAD
 
-extern int keypad[4][3];
+extern int keypad[3][3];
 
 struct KeyEvent
 {

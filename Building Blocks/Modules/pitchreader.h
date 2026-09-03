@@ -1,5 +1,5 @@
-#ifndef Yin_h
-#define Yin_h
+#ifndef PITCHREADER
+#define PITCHREADER
 
 #include <stdint.h>
 #include <math.h>

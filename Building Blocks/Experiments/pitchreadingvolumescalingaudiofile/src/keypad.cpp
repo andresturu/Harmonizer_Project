@@ -4,24 +4,21 @@
 #define R0_pin 13
 #define R1_pin 14
 #define R2_pin 27
-#define R3_pin 26
 #define C0_pin 25
 #define C1_pin 33
 #define C2_pin 32
 
-const int numRows = 4;
+const int numRows = 3;
 const int numCols = 3;
 const unsigned long debounceDelay = 20;
 
-int rowPins[] = {R0_pin, R1_pin, R2_pin, R3_pin};
+int rowPins[] = {R0_pin, R1_pin, R2_pin};
 int colPins[] = {C0_pin, C1_pin, C2_pin};
 
-int keyIds[4][3] = {
+int keyIds[3][3] = {
     {1, 2, 3},
     {4, 5, 6},
-    {7, 8, 9},
-    {10,11,12}
-};
+    {7, 8, 9}};
 
 unsigned long lastDebounceTimes[numRows][numCols];
 
@@ -48,7 +45,7 @@ void printKeypad()
 
 void setUpKeypad()
 {
-    // initialize rows with pulup resitors
+    // initialize rows with pull-up resitors
     for (int i = 0; i < numRows; i++)
     {
         pinMode(rowPins[i], INPUT_PULLUP);

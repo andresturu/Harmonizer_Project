@@ -25,7 +25,7 @@ Yin yin;
 
 
 const std::string noteNames[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
-std::string find_note(float pitch_freq);
+int find_midi_note(float pitch_freq);
 
 static const i2s_config_t i2s_config = {
     .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_RX),
@@ -69,7 +69,7 @@ void loop() {
   i2s_read(i2s_num, sample_buffer, i2s_bytes, &bytesRead, portMAX_DELAY);
 
   float pitch_freq = Yin_getPitch(&yin,(int32_t*) sample_buffer);
-  std::string note = find_note(pitch_freq);
+  std::string note = find_midi_note(pitch_freq);
 
   //find volume level of input
 
@@ -86,7 +86,7 @@ void loop() {
 
 
 //A4 is 440 Hz, A4 is midi note 69
-std::string find_note(float pitch_freq) {
+int find_midi_note(float pitch_freq) {
   int midi_note = round(12.0f* log2(pitch_freq/440.0f)+ 69.0f);
   int octave = midi_note/12 -1;
   int remainder = midi_note%12;
@@ -96,8 +96,8 @@ std::string find_note(float pitch_freq) {
   if (pitch_freq < 0) {
     return "no note";
   }
-
-  return noteNames[remainder] + std::to_string(octave);
+  return midi_note;
+  //return noteNames[remainder] + std::to_string(octave);
 
 
 }
