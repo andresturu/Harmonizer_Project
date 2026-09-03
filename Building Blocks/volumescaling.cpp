@@ -53,7 +53,7 @@ float rms_to_db(float rms) {
 }
 
 float smooth_dB(float old_dB, float new_dB) {
-  return old_dB*(1.0f-ALPHA) + new_dB*(ALPHA);
+  return old_dB*(1.0f-EMA_ALPHA) + new_dB*(EMA_ALPHA);
 }
 
 float dB_to_gain(float dB) {
