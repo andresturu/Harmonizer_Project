@@ -30,8 +30,8 @@ static const i2s_config_t i2s_config = {
 };
 
 static const i2s_pin_config_t pin_config = {
-    .bck_io_num = 26,     // bit clock -> BCLK on amp
-    .ws_io_num = 25,      // word select -> LRCLK on amp
+    .bck_io_num = 19,     // bit clock -> BCLK on amp
+    .ws_io_num = 21,      // word select -> LRCLK on amp
     .data_out_num = 22,   // data out -> DIN on amp
     .data_in_num = I2S_PIN_NO_CHANGE   // not used, no mic input
 };

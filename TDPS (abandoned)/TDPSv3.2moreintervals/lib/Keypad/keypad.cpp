@@ -1,12 +1,12 @@
 #include "keypad.h"
 #include <Arduino.h>
 
-#define R0_pin 19
-#define R1_pin 18
-#define R2_pin 5
-#define C0_pin 17
-#define C1_pin 16
-#define C2_pin 0
+#define R0_pin 13
+#define R1_pin 14
+#define R2_pin 27
+#define C0_pin 25
+#define C1_pin 33
+#define C2_pin 32
 
 const int numRows = 3;
 const int numCols = 3;
