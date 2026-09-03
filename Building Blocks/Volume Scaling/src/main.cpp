@@ -88,7 +88,7 @@ void loop() {
   // 1. Read the raw I2S buffer
   i2s_read(i2s_num, sample_buffer, i2s_bytes, &bytesRead, portMAX_DELAY);
   high_pass_filter(sample_buffer, sample_count);
-
+  /*
   int32_t minVal = INT32_MAX, maxVal = INT32_MIN;
   int64_t sum = 0;
   for (int i = 0; i < sample_count; i++) {
@@ -97,8 +97,9 @@ void loop() {
     sum += sample_buffer[i];
   }
   Serial.printf("min=%ld max=%ld avg=%lld\n", (long)minVal, (long)maxVal, sum / sample_count);
-  
-  //find volume level of input !Focus on this right now!
+  */
+
+
 
   //find smoothed RMS over period of time
   //consider using different alphas for note attack and non-attack?
@@ -136,6 +137,7 @@ float get_RMS(int32_t* buffer) {
   return RMS;
 }
 
+//using this one actually for dB now, naming is off
 float get_smoothRMS(float old_RMS, float new_RMS) {
   return old_RMS*(1.0f-alpha) + new_RMS*(alpha);
 }
