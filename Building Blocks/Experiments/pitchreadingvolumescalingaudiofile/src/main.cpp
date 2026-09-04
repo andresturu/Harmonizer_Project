@@ -11,6 +11,7 @@
 #include "volumescaling.h"
 #include "pitchreader.h"
 #include "voice.h"
+#include "keypad.h"
 
 static const i2s_port_t i2s_num = I2S_NUM_0;
 const uint16_t sample_count = 512;
@@ -20,10 +21,21 @@ const int num_channels = 1;
 const uint16_t i2s_bytes = sample_count * i2s_bytes_per_sample * num_channels;
 int32_t sample_buffer[sample_count];
 
-int num_voices = 10;
+const int num_voices = 10;
 //pass voices array to processAudio(), 
 //then processAudio() will use the frozen_midi_notes numbers to play harmony output
-Voice voices[num_voices];
+Voice voices[num_voices] {
+  {{ 0,  4,  7,  0}},   // major triad
+  {{ 0,  3,  7,  0}},   // minor triad
+  {{ 0,  4,  7, 11}},   // major7
+  {{ 0,  3,  7, 10}},   // minor7
+  {{ 0,  4,  7, 10}},   // dominant7
+  {{-12, 0,  0,  0}},   // octave down
+  {{ 12, 0,  0,  0}},   // octave up
+  {{ -5, 0,  0,  0}},   // fourth below
+  {{  7, 0,  0,  0}},   // fifth above
+  {{  4, 7, 10, 13}},   // major9
+};
 
 
 Yin yin;
@@ -58,6 +70,8 @@ static const i2s_pin_config_t pin_config = {
 
 void setup() {
   Serial.begin(115200);
+  setUpKeypad();
+  Yin_init(&yin, sample_count, YIN_DEFAULT_THRESHOLD);
 
   esp_err_t err = i2s_driver_install(i2s_num, &i2s_config, 0, NULL);
   if (err != ESP_OK) {
@@ -80,7 +94,7 @@ void loop() {
   // retrieve pitch and corresponding midi note number from audio input
   float pitch_freq = Yin_getPitch(&yin,(int32_t*) sample_buffer);
   int curr_midi_note = find_midi_note(pitch_freq);
-  Serial.printf("midi_Note: %d, Fundamental Frequency: %.2f Hz\n", midi_note, pitch_freq);
+  Serial.printf("midi_Note: %d, Fundamental Frequency: %.2f Hz\n", curr_midi_note, pitch_freq);
 
   // check which buttons were pressed on keypad, and activate/deactivate buttons based on it
   KeyEvent keyevent = checkKeypad();
@@ -103,10 +117,11 @@ void loop() {
       activate_voice(voices, desired_voice_index, curr_midi_note);
     }
   }
-
+  print_voices(voices, num_voices);
+  
   // Process the audio block with crossfading, implement counter++ for EACH voice independently!!
   // because each voice starts independently
-  processAudio(current_sample_index, LOOP_START, LOOP_END);
+  //processAudio(current_sample_index, LOOP_START, LOOP_END);
 
   // scale harmonizer output based on calculated gain, wondering if sample_buffer is getting used way too much
   for (int i = 0; i < sample_count; i++) {
@@ -133,8 +148,8 @@ void processAudio(Voice* voices) {
 
       voices[i].curr_index ++;
 
-      if (current_index >= end_loop) {
-      current_index = start_loop + FADE_LEN;
+      if (voices[i].curr_index >= LOOP_END) {
+        voices[i].curr_index = LOOP_START + FADE_LEN;
       }
     }
   }
