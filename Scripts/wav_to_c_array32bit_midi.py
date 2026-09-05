@@ -16,6 +16,12 @@ import subprocess
 
 TARGET_SAMPLE_RATE = 16000  # change to 22050 if you want higher quality
 
+# Placeholder loop points: a fixed fraction of each note's own length.
+# A dedicated loop-point-finder pass (run between this script and the final
+# header) is expected to overwrite loop_start/loop_end with values chosen
+# from the actual waveform (matching phase/amplitude at the splice).
+LOOP_START_FRACTION = 0.60
+
 
 def parse_midi_note(filename):
     """Turn '60.wav' into the int 60. Errors if the filename isn't a plain integer."""
@@ -63,6 +69,13 @@ def raw_to_c_array(raw_path, var_name):
     lines.append("};")
     lines.append(f"const uint32_t {var_name}_len = {n_samples};")
     return "\n".join(lines), n_samples
+
+def compute_loop_points(n_samples):
+    """Placeholder loop_start/loop_end for a note of this length. See the
+    LOOP_START_FRACTION comment above: these are meant to be refined later."""
+    loop_start = int(LOOP_START_FRACTION * n_samples)
+    loop_end = n_samples
+    return loop_start, loop_end
 
 def main():
     if len(sys.argv) != 3:
@@ -114,7 +127,8 @@ def main():
         header_lines.append(array_code)
         header_lines.append("")
 
-        lookup_entries.append(f'    {{ {midi_note}, {var_name}, {var_name}_len }}')
+        loop_start, loop_end = compute_loop_points(n_samples)
+        lookup_entries.append(f'    {{ {midi_note}, {var_name}, {var_name}_len, {loop_start}, {loop_end} }}')
         total_bytes += n_samples * 4
 
         os.remove(raw_path)  # cleanup intermediate file
@@ -124,6 +138,8 @@ def main():
     header_lines.append("    int midi_note;")
     header_lines.append("    const int32_t* samples;")
     header_lines.append("    uint32_t length;")
+    header_lines.append("    uint32_t loop_start;")
+    header_lines.append("    uint32_t loop_end;")
     header_lines.append("} NoteSample;")
     header_lines.append("")
     header_lines.append(f"const NoteSample note_table[{len(lookup_entries)}] = {{")
