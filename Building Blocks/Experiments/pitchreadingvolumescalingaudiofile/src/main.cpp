@@ -96,21 +96,18 @@ void loop() {
   int curr_midi_note = find_midi_note(pitch_freq);
   Serial.printf("midi_Note: %d, Fundamental Frequency: %.2f Hz\n", curr_midi_note, pitch_freq);
 
-  // check which buttons were pressed on keypad, and activate/deactivate buttons based on it
+  // check for a button press from the keypad, then activate/deactivate buttons accordingly
   KeyEvent keyevent = checkKeypad();
   if (keyevent.pressed)
   {
-    //could use switch/case instead of if's
-    // if reset button is pressed, stop all harmonizer voices
     if (keyevent.keyID == 1)
     {
       reset_voices(voices, num_voices); // setting active to false, unfreezing, setting curr_index to 0
     }
-    //flip voicings up/down for next press, NOT past voicings!
+    //flip voicings up/down for next press
     else if (keyevent.keyID == 2) {
       //IMPLEMENT
     }
-    // turn on a voicing, freeze the harmonized mini notes
     else
     {
       int desired_voice_index = keyevent.keyID-3; //might require changing in the future
@@ -119,9 +116,10 @@ void loop() {
   }
   print_voices(voices, num_voices);
   
-  // Process the audio block with crossfading, implement counter++ for EACH voice independently!!
-  // because each voice starts independently
+
   //processAudio(current_sample_index, LOOP_START, LOOP_END);
+
+
 
   // scale harmonizer output based on calculated gain, wondering if sample_buffer is getting used way too much
   for (int i = 0; i < sample_count; i++) {

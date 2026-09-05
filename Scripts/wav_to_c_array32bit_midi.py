@@ -4,25 +4,32 @@ Batch-converts WAV note recordings into a single C header file
 containing raw PCM sample arrays + a lookup table, for use on ESP32.
 
 Usage (second argument is where to find .wav files and third argument where to put output_samples.h):
-    python3 wav_to_c_array.py notes_folder/ output_samples.h
+    python3 wav_to_c_array32bit_midi.py notes_folder/ output_samples.h
 
-Expects WAV files named like: C4.wav, Db4.wav, D4.wav, ... (one per note)
+Expects WAV files named by their MIDI note number, e.g.: 60.wav, 64.wav, 67.wav, ...
 Outputs 32-bit mono PCM at TARGET_SAMPLE_RATE, embedded as int32_t arrays.
 """
 
 import sys
 import os
 import subprocess
-import re
 
 TARGET_SAMPLE_RATE = 16000  # change to 22050 if you want higher quality
 
 
-def sanitize_name(filename):
-    """Turn 'Db4.wav' into 'Db4' -> valid C identifier 'note_Db4'."""
-    name = os.path.splitext(filename)[0]
-    name = re.sub(r'[^A-Za-z0-9_]', '_', name)
-    return f"note_{name}"
+def parse_midi_note(filename):
+    """Turn '60.wav' into the int 60. Errors if the filename isn't a plain integer."""
+    stem = os.path.splitext(filename)[0]
+    try:
+        return int(stem)
+    except ValueError:
+        raise ValueError(
+            f"'{filename}' isn't named as a MIDI note number (expected e.g. '60.wav'), got stem '{stem}'"
+        )
+
+def var_name_for(midi_note):
+    """midi note 60 -> valid C identifier 'note_60'."""
+    return f"note_{midi_note}"
 
 def convert_wav_to_raw(wav_path, raw_path):
     cmd = [
@@ -34,7 +41,7 @@ def convert_wav_to_raw(wav_path, raw_path):
         raw_path
     ]
     #basically makes Python type into the terminal
-    # ffmpeg -i C4.wav -ar 16000 -ac 1 -sample_fmt s32 -f s16le C4.raw
+    # ffmpeg -i 60.wav -ar 16000 -ac 1 -sample_fmt s32 -f s16le 60.raw
     # converts from .wav into raw desired stuff
     subprocess.run(cmd, check=True, capture_output=True)
 
@@ -59,19 +66,27 @@ def raw_to_c_array(raw_path, var_name):
 
 def main():
     if len(sys.argv) != 3:
-        print("Usage: python3 wav_to_c_array.py <notes_folder> <output.h>")
+        print("Usage: python3 wav_to_c_array32bit_midi.py <notes_folder> <output.h>")
         sys.exit(1)
 
-    #sys.argv is a list that contains [wav_to_c_array.py, <notes_folder>, <output.h>]
+    #sys.argv is a list that contains [wav_to_c_array32bit_midi.py, <notes_folder>, <output.h>]
     #so below code is just indexing for the specific paths as specified in terminal
     notes_folder = sys.argv[1]
     output_header = sys.argv[2]
 
     #puts every .wav in notes_folder into wav_files
-    wav_files = sorted(f for f in os.listdir(notes_folder) if f.lower().endswith(".wav"))
+    wav_files = [f for f in os.listdir(notes_folder) if f.lower().endswith(".wav")]
     #if no wav_files in notes_folder
     if not wav_files:
         print(f"No .wav files found in {notes_folder}")
+        sys.exit(1)
+
+    # sort numerically by midi note, not alphabetically by filename
+    # (this also validates every filename up front, before any ffmpeg work happens)
+    try:
+        wav_files = sorted(wav_files, key=parse_midi_note)
+    except ValueError as e:
+        print(f"Error: {e}")
         sys.exit(1)
 
     header_lines = []
@@ -85,28 +100,28 @@ def main():
     total_bytes = 0
 
     for wav_file in wav_files:
-        #joins "notes/"" and "C4.wav" to make a full path -> "notes/C4.wav"
+        midi_note = parse_midi_note(wav_file)
+        #joins "notes/"" and "60.wav" to make a full path -> "notes/60.wav"
         wav_path = os.path.join(notes_folder, wav_file)
-        # joins "notes/" and "C4.wav" to make -> "notes/C4.raw"
+        # joins "notes/" and "60.wav" to make -> "notes/60.raw"
         raw_path = os.path.join(notes_folder, wav_file.replace(".wav", ".raw"))
-        # from "C4.wav" sets var_name = note_C4
-        var_name = sanitize_name(wav_file)
+        # midi_note 60 -> var_name = note_60
+        var_name = var_name_for(midi_note)
 
-        print(f"Converting {wav_file} ...")
+        print(f"Converting {wav_file} (midi note {midi_note}) ...")
         convert_wav_to_raw(wav_path, raw_path)
         array_code, n_samples = raw_to_c_array(raw_path, var_name)
         header_lines.append(array_code)
         header_lines.append("")
 
-        note_label = os.path.splitext(wav_file)[0]
-        lookup_entries.append(f'    {{ "{note_label}", {var_name}, {var_name}_len }}')
+        lookup_entries.append(f'    {{ {midi_note}, {var_name}, {var_name}_len }}')
         total_bytes += n_samples * 4
 
         os.remove(raw_path)  # cleanup intermediate file
 
-    # struct + lookup table for easy access by note name in firmware
+    # struct + lookup table for easy access by midi note in firmware
     header_lines.append("typedef struct {")
-    header_lines.append("    const char* name;")
+    header_lines.append("    int midi_note;")
     header_lines.append("    const int32_t* samples;")
     header_lines.append("    uint32_t length;")
     header_lines.append("} NoteSample;")
