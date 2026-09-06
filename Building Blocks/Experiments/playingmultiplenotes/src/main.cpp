@@ -1,6 +1,10 @@
 #include <Arduino.h>
+#include <esp_partition.h>
 #include "driver/i2s.h"
-#include "better_sound_data.h"
+#include "new_audio.h"
+#include "voice.h"
+
+const esp_partition_t *audio_partition = nullptr;
 
 static const i2s_port_t i2s_num = I2S_NUM_0;
 
@@ -10,28 +14,30 @@ const uint8_t i2s_bytes_per_sample = i2s_bits_per_sample / 8;
 const int num_channels = 1;
 const uint16_t i2s_bytes = sample_count * i2s_bytes_per_sample * num_channels;
 
-uint32_t sample_buffer[sample_count];
+int32_t sample_buffer[sample_count];
+int32_t voice_temp[sample_count];
 
-// Loop parameters are normalized as fractions of each note's own sample length,
-// rather than fixed absolute indices, since notes range from ~17000 to ~37000
-// samples long. Fractions come from the original tuning on note 44 (length 20000):
-// loop started at sample 12030 and the crossfade lasted 206 samples out of the
-// 8068-sample sustain region (12030 -> 20098).
-const float LOOP_START_FRACTION = 12030.0f / 20000.0f;
-const float FADE_FRACTION = 206.0f / (20098.0f - 12030.0f);
+// Which note to loop, hardcoded for this basic test
+const int TEST_MIDI_NOTE = 44;
 
-struct LoopParams {
-  int start;
-  int end;
-  int fade;
+const int num_voices = 10;
+//pass voices array to processAudio(), 
+//then processAudio() will use the frozen_midi_notes numbers to play harmony output
+Voice voices[num_voices] {
+  {{ 0,  4,  7,  0}},   // major triad
+  {{ 0,  3,  7,  0}},   // minor triad
+  {{ 4,  7,  11, 14}},   // major9
+  {{ 3,  7,  10, 14}},   // minor9
+  {{ 3,  6,  9, 14}},   // diminished9
+  {{-12, 0,  0,  0}},   // 
+  {{ 12, 0,  0,  0}},   // octave up
+  {{ -5, 0,  0,  0}},   // fourth below
+  {{  7, 0,  0,  0}},   // fifth above
+  {{  4, 7, 10, 13}},   // major9
 };
 
-LoopParams computeLoopParams(uint32_t length);
-const NoteSample* findNote(int midi_index);
-void processAudio(int& current_index, const NoteSample* note, const LoopParams& loop);
-
 static const i2s_config_t i2s_config = {
-    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_RX),
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
     .sample_rate = 16000,
     .bits_per_sample = i2s_bits_per_sample,
     .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
@@ -47,66 +53,12 @@ static const i2s_config_t i2s_config = {
 static const i2s_pin_config_t pin_config = {
     .bck_io_num = 19,
     .ws_io_num = 21,
-    .data_out_num = 22,   // to amp DIN
-    .data_in_num = 23     // from mic SD
+    .data_out_num = 22,
+    .data_in_num = I2S_PIN_NO_CHANGE
 };
 
-void setup() {
-  Serial.begin(115200);
-
-  esp_err_t err = i2s_driver_install(i2s_num, &i2s_config, 0, NULL);
-  if (err != ESP_OK) {
-    Serial.printf("i2s_driver_install failed: %s (%d)\n", esp_err_to_name(err), err);
-  }
-
-  i2s_set_pin(i2s_num, &pin_config);
-
-}
-
-void loop() {
-  size_t bytesRead, bytesWritten;
-  static int current_sample_index = 0;
-  static unsigned long previous_time = millis();
-  static int first_midi = 44;
-  static int last_midi = 72;
-  static int midi_index = first_midi;
-  static int prev_midi_index = first_midi; // matches midi_index initially so the very first note still plays its full attack from sample 0
-
-  // Pace execution using I2S timing
-  i2s_read(i2s_num, sample_buffer, i2s_bytes, &bytesRead, portMAX_DELAY);
-
-  unsigned long current_time = millis();
-  if (current_time - previous_time > 3000) {
-    previous_time = millis();
-    (midi_index >= last_midi) ? midi_index = first_midi: midi_index ++;
-  }
-
-  const NoteSample* note = findNote(midi_index);
-  if (note == nullptr) return;
-  LoopParams loop_params = computeLoopParams(note->length);
-
-  if (midi_index != prev_midi_index) {
-    current_sample_index = loop_params.start; // restart cleanly for the new note; each note has its own loop bounds
-    prev_midi_index = midi_index;
-  }
-
-  // Process the audio block with crossfading (updates current_sample_index)
-  processAudio(current_sample_index, note, loop_params);
-
-  // Write out to DAC
-  i2s_write(i2s_num, sample_buffer, i2s_bytes, &bytesWritten, portMAX_DELAY);
-}
-
-LoopParams computeLoopParams(uint32_t length) {
-  LoopParams p;
-  p.end = (int)length;
-  p.start = (int)(LOOP_START_FRACTION * length);
-  int region = p.end - p.start;
-  p.fade = (int)(FADE_FRACTION * region);
-  if (p.fade < 1) p.fade = 1;
-  return p;
-}
-
+void fillBlock(const NoteSample* note, uint32_t* cursor, int32_t* out_buffer);
+void processAudio(Voice* voices, int num_voices);
 const NoteSample* findNote(int midi_index) {
   for (int i = 0; i < note_table_count; i++) {
     if (note_table[i].midi_note == midi_index) {
@@ -116,37 +68,115 @@ const NoteSample* findNote(int midi_index) {
   return nullptr;
 }
 
-void processAudio(int& current_index, const NoteSample* note, const LoopParams& loop) {
+
+void setup() {
+  Serial.begin(115200);
+
+  audio_partition = esp_partition_find_first(
+      ESP_PARTITION_TYPE_DATA,
+      (esp_partition_subtype_t)0x40,
+      "audio"
+  );
+  if (audio_partition == nullptr) {
+    Serial.println("ERROR: audio partition not found!");
+    while (true) delay(1000);
+  }
+  Serial.printf("Audio partition OK: address=0x%lx size=%lu\n",
+                audio_partition->address, audio_partition->size);
+
+  esp_err_t err = i2s_driver_install(i2s_num, &i2s_config, 0, NULL);
+  if (err != ESP_OK) {
+    Serial.printf("i2s_driver_install failed: %s (%d)\n", esp_err_to_name(err), err);
+  }
+  i2s_set_pin(i2s_num, &pin_config);
+
+  const NoteSample* note = findNote(TEST_MIDI_NOTE);
+  if (note == nullptr) {
+    Serial.printf("Note %d not found in table!\n", TEST_MIDI_NOTE);
+  } else {
+    Serial.printf("Found note %d: offset=%lu length=%lu\n",
+                  TEST_MIDI_NOTE, note->offset, note->length);
+  }
+}
+
+void loop() {
+  size_t bytesWritten;
+
+  int curr_midi_note = TEST_MIDI_NOTE;
+  static bool hi = true;
+  if (hi) {
+    activate_voice(voices, 2, curr_midi_note);
+    hi = false;
+  }
+ 
+  processAudio(voices, num_voices);
+
+  i2s_write(i2s_num, sample_buffer, i2s_bytes, &bytesWritten, portMAX_DELAY);
+}
+
+
+void processAudio(Voice* voices, int num_voices) {
+  // clear the mix buffer before summing voices into it
   for (int i = 0; i < sample_count; i++) {
+    sample_buffer[i] = 0;
+  }
 
-    // Check if we are inside the crossfade boundary region
-    if (current_index >= (loop.end - loop.fade)) {
+  for (int v = 0; v < num_voices; v++) {
+    if (!voices[v].active) continue;
 
-      // Calculate progress through crossfade: 0.0f at start, 1.0f at loop.end
-      int fade_pos = current_index - (loop.end - loop.fade);
-      float progress = (float)fade_pos / (float)loop.fade;
+    for (int n = 0; n < MAX_NOTES_PER_VOICE; n++) {
+      int midi_note = voices[v].frozen_midi_notes[n];
+      if (midi_note == 0) continue;   // unused slot
 
-      // Primary sample ending (fading out)
-      int32_t sample_out = note->samples[current_index];
+      const NoteSample* note = findNote(midi_note);
+      if (note == nullptr) continue;
 
-      // Secondary sample starting from loop head (fading in)
-      int32_t sample_in = note->samples[loop.start + fade_pos];
+      // this note's own cursor lives at voices[v].curr_index[n]
+      // fill voice_temp buffer with note info, based on its current index
+      fillBlock(note, &voices[v].curr_index[n], voice_temp);
 
-      float fade_out_gain = cosf(progress * (float)M_PI_2);   // 1 -> 0
-      float fade_in_gain   = sinf(progress * (float)M_PI_2);  // 0 -> 1
-
-      sample_buffer[i] = (int32_t)(fade_out_gain * sample_out + fade_in_gain * sample_in);
-
-    } else {
-      // Normal playback outside crossfade region
-      sample_buffer[i] = (uint32_t)note->samples[current_index];
+      // add note info to sample_buffer
+      for (int i = 0; i < sample_count; i++) {
+        sample_buffer[i] += voice_temp[i];
+      }
     }
+  }
+}
 
-    current_index++;
+void fillBlock(const NoteSample* note, uint32_t* cursor, int32_t* out_buffer) {
+  uint32_t remaining = note->loop_end - *cursor;
 
-    // When reaching loop.end, jump directly to loop.start + loop.fade
-    if (current_index >= loop.end) {
-      current_index = loop.start + loop.fade;
-    }
+  if (remaining >= sample_count) {
+    // Whole block fits before this note's loop point
+    esp_partition_read(
+        audio_partition,
+        note->offset + (*cursor) * sizeof(int32_t),
+        out_buffer,
+        sample_count * sizeof(int32_t)
+    );
+    *cursor += sample_count;
+
+  } else {
+    // Block spans the loop point: read the tail, then the head, in two calls
+    esp_partition_read(
+        audio_partition,
+        note->offset + (*cursor) * sizeof(int32_t),
+        out_buffer,
+        remaining * sizeof(int32_t)
+    );
+
+    uint32_t head_needed = sample_count - remaining;
+    esp_partition_read(
+        audio_partition,
+        note->offset + note->loop_start * sizeof(int32_t),
+        out_buffer + remaining,
+        head_needed * sizeof(int32_t)
+    );
+
+    *cursor = note->loop_start + head_needed;
+  }
+
+  if (*cursor >= note->loop_end) {
+    *cursor = note->loop_start;
   }
 }
